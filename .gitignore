@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# macOS
+.DS_Store
+
+# Editor/IDE
+.vscode/
+
+# Logs and caches
+*.log
+.cache/
+
+# Model artifacts (generated)
+model/**/*.mlpackage/
+bench*
+test*
+debug*

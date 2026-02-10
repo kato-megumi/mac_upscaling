@@ -1,0 +1,5 @@
+torch
+torchvision
+coremltools>=7.0
+Pillow
+numpy
