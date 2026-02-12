@@ -33,6 +33,13 @@ def _save_image(img: Image.Image, path: Path, fmt: str, kwargs: dict) -> Path:
     return path
 
 
+def _load_image(path: Path) -> Image.Image:
+    """Load an image and force pixel data read (runs in a thread)."""
+    img = Image.open(path)
+    img.load()
+    return img
+
+
 def load_coreml_model(model_path: str, compute_units: str = "ALL"):
     """Load a Core ML model."""
     cu_map = {
@@ -121,7 +128,7 @@ def upscale_image(model, img: Image.Image, tile_w: int, tile_h: int, scale: int,
             tile[:th, :tw, :] = img_np[y0:y1, x0:x1, :]
 
             # Convert to PIL for CoreML (ensure exact tile dimensions)
-            tile_pil = Image.fromarray(tile).resize((tile_w, tile_h), Image.Resampling.LANCZOS)
+            tile_pil = Image.fromarray(tile)
 
             # Run inference
             pred = model.predict({"input": tile_pil})
@@ -234,32 +241,44 @@ def process_folder(args):
     model.predict({"input": dummy})
 
     total_start = time.time()
-    save_futures: list[tuple[Future, str, float]] = []
+    max_pending_saves = 3
 
-    with ThreadPoolExecutor(max_workers=2) as pool:
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        # Pre-load first image in background thread
+        next_img_future: Future = pool.submit(_load_image, images[0])
+        save_futures: list[Future] = []
+
         for i, img_path in enumerate(images, 1):
-            # Wait for previous save to finish before reusing memory
-            if save_futures:
-                fut, name, t0 = save_futures[-1]
-                fut.result()  # block until saved
+            # Drain completed saves; block only if too many are pending
+            save_futures = [f for f in save_futures if not f.done()]
+            while len(save_futures) >= max_pending_saves:
+                save_futures[0].result()
+                save_futures.pop(0)
 
             print(f"\n[{i}/{len(images)}] Processing {img_path.name} ...")
             start = time.time()
 
-            img = Image.open(img_path)
+            # Get pre-loaded image (blocks only until disk read finishes)
+            img = next_img_future.result()
+
+            # Pre-load next image while we upscale this one
+            if i < len(images):
+                next_img_future = pool.submit(_load_image, images[i])
+
             result = upscale_image(model, img, tile_w, tile_h, scale, args.padding)
+            del img  # free input memory early
 
             infer_elapsed = time.time() - start
             out_path = output_dir / f"{img_path.stem}{ext}"
 
-            # Submit save to background thread
+            # Submit save to background thread (non-blocking)
             future = pool.submit(_save_image, result, out_path, pil_fmt, save_kwargs)
-            save_futures.append((future, out_path.name, infer_elapsed))
+            save_futures.append(future)
             print(f"  → {out_path.name} ({result.size[0]}×{result.size[1]}) "
-                  f"inferred in {infer_elapsed:.1f}s, saving async ...")
+                  f"inferred in {infer_elapsed:.1f}s")
 
         # Wait for all remaining saves
-        for fut, name, _ in save_futures:
+        for fut in save_futures:
             fut.result()
 
     total_elapsed = time.time() - total_start
