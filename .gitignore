@@ -25,3 +25,4 @@ model/**/*.mlpackage/
 bench*
 test*
 debug*
+*.mlpackage

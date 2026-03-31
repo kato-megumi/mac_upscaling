@@ -6,10 +6,13 @@ Upscale images on macOS using ESRGAN models, accelerated via Core ML (GPU / Appl
 
 ```bash
 cd /path/to/mac_upscaling
-python3 -m venv .venv
+uv sync
 source .venv/bin/activate
-pip install -r requirements.txt
 ```
+
+`uv sync` creates the virtual environment, resolves dependencies from `pyproject.toml`, and writes a `uv.lock` file for reproducible installs.
+
+> Install `uv` if needed: `curl -LsSf https://astral.sh/uv/install.sh | sh`
 
 ## Step 1: Download an ESRGAN model
 
@@ -23,7 +26,7 @@ wget https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_
 ## Step 2: Convert .pth → Core ML
 
 ```bash
-python convert_model.py --input RealESRGAN_x4plus.pth --output esrgan_x4.mlpackage --tile 256
+uv run convert_model.py --input RealESRGAN_x4plus.pth --output esrgan_x4.mlpackage --tile 256
 ```
 
 Options:
@@ -35,7 +38,7 @@ Options:
 ## Step 3: Upscale images
 
 ```bash
-python upscale_folder.py \
+uv run upscale_folder.py \
     --model esrgan_x4.mlpackage \
     --input ./low_res \
     --output ./high_res \
