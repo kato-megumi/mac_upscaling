@@ -14,6 +14,7 @@ from pathlib import Path
 import coremltools as ct
 import numpy as np
 from PIL import Image
+from tqdm import tqdm
 
 SUPPORTED_EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".tif", ".webp"}
 
@@ -200,9 +201,9 @@ def process_folder(args):
     output_dir = Path(args.output)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Gather image files
+    # Gather image files (recursive)
     images = sorted(
-        f for f in input_dir.iterdir()
+        f for f in input_dir.rglob("*")
         if f.is_file() and f.suffix.lower() in SUPPORTED_EXTENSIONS
     )
 
@@ -240,7 +241,6 @@ def process_folder(args):
     dummy = Image.new("RGB", (tile_w, tile_h), (128, 128, 128))
     model.predict({"input": dummy})
 
-    total_start = time.time()
     max_pending_saves = 3
 
     with ThreadPoolExecutor(max_workers=3) as pool:
@@ -248,41 +248,39 @@ def process_folder(args):
         next_img_future: Future = pool.submit(_load_image, images[0])
         save_futures: list[Future] = []
 
-        for i, img_path in enumerate(images, 1):
-            # Drain completed saves; block only if too many are pending
-            save_futures = [f for f in save_futures if not f.done()]
-            while len(save_futures) >= max_pending_saves:
-                save_futures[0].result()
-                save_futures.pop(0)
+        with tqdm(total=len(images), unit="img", dynamic_ncols=True) as pbar:
+            for i, img_path in enumerate(images, 1):
+                # Drain completed saves; block only if too many are pending
+                save_futures = [f for f in save_futures if not f.done()]
+                while len(save_futures) >= max_pending_saves:
+                    save_futures[0].result()
+                    save_futures.pop(0)
 
-            print(f"\n[{i}/{len(images)}] Processing {img_path.name} ...")
-            start = time.time()
+                rel = img_path.relative_to(input_dir)
+                pbar.set_description(str(rel))
 
-            # Get pre-loaded image (blocks only until disk read finishes)
-            img = next_img_future.result()
+                # Get pre-loaded image (blocks only until disk read finishes)
+                img = next_img_future.result()
 
-            # Pre-load next image while we upscale this one
-            if i < len(images):
-                next_img_future = pool.submit(_load_image, images[i])
+                # Pre-load next image while we upscale this one
+                if i < len(images):
+                    next_img_future = pool.submit(_load_image, images[i])
 
-            result = upscale_image(model, img, tile_w, tile_h, scale, args.padding)
-            del img  # free input memory early
+                result = upscale_image(model, img, tile_w, tile_h, scale, args.padding)
+                del img  # free input memory early
 
-            infer_elapsed = time.time() - start
-            out_path = output_dir / f"{img_path.stem}{ext}"
+                # Preserve folder structure in output
+                out_path = output_dir / rel.parent / f"{img_path.stem}{ext}"
+                out_path.parent.mkdir(parents=True, exist_ok=True)
 
-            # Submit save to background thread (non-blocking)
-            future = pool.submit(_save_image, result, out_path, pil_fmt, save_kwargs)
-            save_futures.append(future)
-            print(f"  → {out_path.name} ({result.size[0]}×{result.size[1]}) "
-                  f"inferred in {infer_elapsed:.1f}s")
+                # Submit save to background thread (non-blocking)
+                future = pool.submit(_save_image, result, out_path, pil_fmt, save_kwargs)
+                save_futures.append(future)
+                pbar.update(1)
 
         # Wait for all remaining saves
         for fut in save_futures:
             fut.result()
-
-    total_elapsed = time.time() - total_start
-    print(f"\n✅  All done! {len(images)} images upscaled in {total_elapsed:.1f}s")
 
 
 def main():

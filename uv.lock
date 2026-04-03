@@ -162,6 +162,7 @@ dependencies = [
     { name = "pillow" },
     { name = "torch" },
     { name = "torchvision" },
+    { name = "tqdm" },
 ]
 
 [package.metadata]
@@ -171,6 +172,7 @@ requires-dist = [
     { name = "pillow" },
     { name = "torch" },
     { name = "torchvision" },
+    { name = "tqdm" },
 ]
 
 [[package]]
