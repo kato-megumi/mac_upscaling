@@ -9,4 +9,7 @@ dependencies = [
     "Pillow",
     "numpy",
     "tqdm",
+    "spandrel>=0.4.2",
+    "einops>=0.8.2",
+    "safetensors>=0.7.0",
 ]

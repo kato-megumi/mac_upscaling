@@ -151,9 +151,12 @@ def upscale_image(model, img: Image.Image, tile_w: int, tile_h: int, scale: int,
                 # Strip alpha if present
                 if out_tile_np.shape[-1] == 4:
                     out_tile_np = out_tile_np[:, :, :3]
-                # Scale [0, 1] → [0, 255] if values are in float range
-                # Use mean < 1.5 to handle models whose output slightly exceeds 1.0
-                if out_tile_np.mean() < 1.5:
+                # Scale [0, 1] → [0, 255] if the model outputs normalised floats.
+                # CoreML models compiled with ImageType(scale=1/255) always receive
+                # [0,1]-range input and output [0,1]-range floats.  Use the maximum
+                # value to detect this: an image in [0,255] will almost always have
+                # max > 2, whereas a [0,1] image has max ≤ 1 (or very slightly above).
+                if out_tile_np.max() < 2.0:
                     out_tile_np = out_tile_np * 255.0
                 out_tile_np = np.clip(out_tile_np, 0, 255)
 
