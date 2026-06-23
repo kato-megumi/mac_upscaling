@@ -13,10 +13,11 @@ from pathlib import Path
 
 import coremltools as ct
 import numpy as np
+import pillow_jxl  # noqa: F401  — registers the JPEG XL plugin with Pillow
 from PIL import Image
 from tqdm import tqdm
 
-SUPPORTED_EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".tif", ".webp"}
+SUPPORTED_EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".tif", ".webp", ".jxl"}
 
 # Maps --format value → (file extension, Pillow format string, default save kwargs)
 OUTPUT_FORMATS: dict[str, tuple[str, str, dict]] = {
@@ -25,6 +26,8 @@ OUTPUT_FORMATS: dict[str, tuple[str, str, dict]] = {
     "png":      (".png",  "PNG",  {}),
     "jpg":      (".jpg",  "JPEG", {"quality": 98, "subsampling": 0}),
     "jpeg":     (".jpg",  "JPEG", {"quality": 98, "subsampling": 0}),
+    "jxl":      (".jxl",  "JXL",  {"quality": 98, "effort": 7}),
+    "jxl_ll":   (".jxl",  "JXL",  {"lossless": True, "effort": 7}),
 }
 
 
